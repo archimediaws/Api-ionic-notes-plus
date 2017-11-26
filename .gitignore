@@ -2,3 +2,4 @@
 .idea/
 vendor
 vendor/
+class/Connection.php
