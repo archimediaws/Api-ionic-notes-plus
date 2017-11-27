@@ -36,7 +36,7 @@ if($method == "OPTIONS") {
 }
 */
 
-//require "flight/Flight.php";
+// require "flight/Flight.php";
 require "autoload.php";
 require_once('vendor/autoload.php');
 
