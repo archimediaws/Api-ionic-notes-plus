@@ -27,8 +27,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     exit(0);
 }
 
-// test weeb hook gggg erthgtrhtrh
-
 //var_dump($_SERVER);
 
 /*
