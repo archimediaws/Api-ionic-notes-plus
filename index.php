@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
 }
 
 // test webhook github
-// test vendor
+// test vendor plus
 //var_dump($_SERVER);
 
 /*
