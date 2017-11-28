@@ -1,5 +1,6 @@
 <?php
 
+
 class Note extends Model implements JsonSerializable {
 
     private $title;

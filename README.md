@@ -18,3 +18,4 @@
      PRIMARY KEY (`id`),
      UNIQUE KEY `users_email_unique` (`email`)
     ) ENGINE=MyISAM DEFAULT CHARSET=utf8
+    
