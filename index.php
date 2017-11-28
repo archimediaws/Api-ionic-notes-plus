@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     exit(0);
 }
 
+
 /*
  * Méthode pour récupérer le tableau JSON envoyé côté client
  */
