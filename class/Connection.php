@@ -24,12 +24,3 @@ class Connection {
 //->getConnection(); //Tout le temps la meme connexion
 // new Connection() -> impossible a faire de l'exterrieur
 // Singleton pattern
-
-
-// if( empty( self::$connection ) ){    
-//     self::$connection = new PDO(
-//         "mysql:dbname=idem_api;host=localhost",
-//         "root",
-//         ""
-//     );
-// }

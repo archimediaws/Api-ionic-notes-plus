@@ -10,6 +10,7 @@ class NoteRepository extends Repository {
         $result = $result->fetchAll( PDO::FETCH_ASSOC );
 
         $notes = [];
+
         foreach( $result as $data ){
             $notes[] = new Note( $data );
         }
@@ -43,7 +44,7 @@ class NoteRepository extends Repository {
      * @return array
      */
     public function getByUserId( User $user ) {
-        $query = "SELECT * FROM notes WHERE user_id=:user_id";
+        $query = "SELECT * FROM notes WHERE user_id=:user_id ORDER BY id DESC";
         $prep = $this->connection->prepare( $query );
         $prep->execute([
             'user_id'   =>  $user->getId(),
@@ -77,12 +78,13 @@ class NoteRepository extends Repository {
      */
     private function insert( Note $note ){
 
-        $query = "INSERT INTO notes SET title=:title, content=:content, user_id=:user_id";
+        $query = "INSERT INTO notes SET title=:title, content=:content, user_id=:user_id, picture=:picture";
         $prep = $this->connection->prepare( $query );
         $prep->execute([
             "title"     => $note->getTitle(),
             "content"   => $note->getContent(),
-            "user_id"   => $note->getUserId()
+            "user_id"   => $note->getUserId(),
+            "picture"   => $note->getPicture(),
         ]);
         return $this->connection->lastInsertId();
     }
@@ -93,12 +95,13 @@ class NoteRepository extends Repository {
      */
     private function update( Note $note ){
 
-        $query = "UPDATE notes SET title=:title, content=:content WHERE id=:id";
+        $query = "UPDATE notes SET title=:title, content=:content, picture=:picture WHERE id=:id";
         $prep = $this->connection->prepare( $query );
         $prep->execute([
             "id"            => $note->getId(),
             "title"         => $note->getTitle(),
-            "content"       => $note->getContent()
+            "content"       => $note->getContent(),
+            "picture"       => $note->getPicture(),
         ]);
         return $prep->rowCount();
 

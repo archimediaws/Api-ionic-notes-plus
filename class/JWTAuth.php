@@ -17,11 +17,13 @@ class JWTAuth
                 if( $jwt ) {
 
                     try {
-                        $token = JWT::decode($jwt, $secretKey, array('HS512'));
+                        $cfg = Flight::get('cfg');
+                        $token = JWT::decode($jwt, $secretKey, $cfg['algo']);
                         $this->userId = $token->data->userId;
                         return [
                             'success'   =>  true,
-                            'token'     =>  $token
+                            'token'     =>  $token,
+                            'id'        =>  $token->data->userId,
                         ];
                     } catch( Exception $e ) {
                         return [
@@ -75,7 +77,7 @@ class JWTAuth
             ]
         ];
 
-        $token = JWT::encode($data, $cfg['key'], $cfg['algo']);
+        $token = JWT::encode($data, $cfg['key']);
         return $token;
     }
 
@@ -87,15 +89,21 @@ class JWTAuth
      * @return string
      */
     public function refresh($token, $secretKey) {
+        $cfg = Flight::get('cfg');
         try{
-            $decoded = JWT::decode($token, $secretKey, ['HS256']);
+            $decoded = JWT::decode($token, $secretKey, $cfg['algo']);
             return JWT::encode($decoded, $secretKey);
         }catch ( \Firebase\JWT\ExpiredException $e ) {
             JWT::$leeway = 720000;
-            $decoded = (array) JWT::decode($token, $secretKey, ['HS256']);
+            $decoded = (array) JWT::decode($token, $secretKey, $cfg['algo']);
 
-            $decoded['iat'] = time();
-            $decoded['exp'] = time() + 3600;
+            $issuedAt   = time();
+            $notBefore  = $issuedAt + 10;
+            $expire     = $issuedAt + 60 * 60;
+
+            $decoded['iat'] = $issuedAt;
+            $decoded['nbf'] = $notBefore;
+            $decoded['exp'] = $expire;
 
             return JWT::encode($decoded, $secretKey);
         }catch ( \Exception $e ){
@@ -106,7 +114,7 @@ class JWTAuth
     /**
      * @return null|string
      */
-    private function getHeaders() {
+    public function getHeaders() {
         $headers = null;
         if (isset($_SERVER['Authorization'])) {
             $headers = trim($_SERVER["Authorization"]);

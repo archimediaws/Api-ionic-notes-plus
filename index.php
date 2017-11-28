@@ -1,48 +1,47 @@
 <?php
 use \Firebase\JWT\JWT;
 
-
- header('Access-Control-Allow-Origin: *');
- header("Access-Control-Allow-Headers: X-API-KEY, Origin, X-Requested-With, Content-Type, Accept, Access-Control-Request-Method");
- header("Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE");
-
-
-// if (isset($_SERVER['HTTP_ORIGIN'])) {
-//     header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
-//     header('Access-Control-Allow-Credentials: true');
-//     header('Access-Control-Max-Age: 86400');
-// }
-
-// if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-
-//     if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])) {
-//         header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-//     }
-
-//     if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS'])) {
-//         header("Access-Control-Allow-Headers:        {$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']}");
-//     }
-
-    
-//     exit(0);
-// }
-
-//var_dump($_SERVER);
+date_default_timezone_set('Europe/Paris');
 
 /*
-if($method == "OPTIONS") {
-    echo json_encode($method);
-    exit;
-}
+header('Access-Control-Allow-Origin: *');
+header("Access-Control-Allow-Headers: X-API-KEY, Origin, X-Requested-With, Content-Type, Accept, Access-Control-Request-Method");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE");
 */
 
-// require "flight/Flight.php";
+if (isset($_SERVER['HTTP_ORIGIN'])) {
+    header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
+    header('Access-Control-Allow-Credentials: true');
+    header('Access-Control-Max-Age: 86400');
+}
+
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+
+    if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])) {
+        header("Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE, PATCH");
+    }
+
+    if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS'])) {
+        header("Access-Control-Allow-Headers:        {$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']}");
+    }
+
+    exit(0);
+}
+
+/*
+ * Méthode pour récupérer le tableau JSON envoyé côté client
+ */
+
+//$post = file_get_contents('php://input');
+//$post = json_decode($post, true);
+
+//require "flight/Flight.php";
 require "autoload.php";
 require_once('vendor/autoload.php');
 
 $cfg = [
     'key'   =>  'azertyuiop',
-    'algo'  =>  'HS512'
+    'algo'  =>  ['HS256']
 ];
 
 //Enregistrer en global dans Flight le BddManager
@@ -57,7 +56,10 @@ Flight::route("GET /notes", function(){
     $repo = $bddManager->getNoteRepository();
     $notes = $repo->getAll();
 
-    echo json_encode ( $notes );
+    echo json_encode ( [
+        'success'   =>  true,
+        'notes'     =>  $notes,
+    ] );
 
 });
 
@@ -94,19 +96,17 @@ Flight::route("GET /users/@id", function($id) {
     $user->setId($id);
 
     $bddManager = Flight::get("BddManager");
-    $repo = $bddManager->getNoteRepository();
-    $notes = $repo->getByUserId($user);
+    $notesRepo = $bddManager->getNoteRepository();
+    $notes = $notesRepo->getByUserId($user);
 
-    if( !$notes ) {
-        echo json_encode([
-            'success'   =>  false
-        ]);
-    } else {
-        echo json_encode([
-            'success'   =>  true,
-            'notes'     =>  $notes,
-        ]);
-    }
+    $userRepo = $bddManager->getUserRepository();
+    $user = $userRepo->getById($user);
+
+    echo json_encode([
+        'success'   =>  true,
+        'notes'     =>  $notes,
+        'user'      =>  $user,
+    ]);
 });
 
 //Créer une note
@@ -127,19 +127,27 @@ Flight::route("POST /note", function(){
         "id" => 0
     ];
 
+
     if( strlen( $title ) > 0 && strlen( $content ) > 0 ) {
 
         $note = new Note();
         $note->setTitle( $title );
         $note->setContent( $content );
+        $note->setUserId($response['id']);
+        $note->setPicture(null);
 
         $bddManager = Flight::get("BddManager");
         $repo = $bddManager->getNoteRepository();
         $id = $repo->save( $note );
 
         if( $id != 0 ){
+            $note = new Note();
+            $note->setId($id);
+            $note = $repo->getById($note);
+
             $status["success"] = true;
             $status["id"] = $id;
+            $status["note"] = $note;
         }
 
     }
@@ -187,7 +195,7 @@ Flight::route("DELETE /note/@id", function( $id ){
     
 });
 
-Flight::route("PUT /note/@id", function( $id ){
+Flight::route("POST /note/@id", function( $id ){
 
     $JWTAuth = Flight::get("JWTAuth");
     $response = $JWTAuth->hasAccess(Flight::get("cfg")['key']);
@@ -198,8 +206,8 @@ Flight::route("PUT /note/@id", function( $id ){
 
     //Pour récuperer des données PUT -> les données sont encodé en json string
     //avec ajax, puis décodé ici en php
-    $json = Flight::request()->getBody();
-    $_PUT = json_decode( $json , true);//true pour tableau associatif
+    //$json = Flight::request()->getBody();
+    //$_PUT = json_decode( $json , true);//true pour tableau associatif
 
     $status = [
         'success'   =>  false,
@@ -212,7 +220,8 @@ Flight::route("PUT /note/@id", function( $id ){
     $note = new Note();
     $note->setId($id);
     $note = $repo->getById($note);
-    if( $note && $note->getUserId() != $response['token']->data->userId ) {
+
+    if( !$note || (intval($note->getUserId()) != intval($response['token']->data->userId)) ) {
         echo json_encode([
             'success'   =>  false,
             'error'     =>  'Vous n\'êtes pas autorisés à réaliser cette action.'
@@ -220,28 +229,37 @@ Flight::route("PUT /note/@id", function( $id ){
         exit;
     }
 
-    $status['success'] = false;
-    $status['error'] = 'Vous n\'êtes pas autorisés à réaliser cette action.';
+    $inputs = [
+        'title'     =>  Flight::request()->data->title,
+        'content'   =>  Flight::request()->data->content,
+    ];
 
-    if( isset( $_PUT["title"] ) && isset( $_PUT["content"] ) ){
+    var_dump($inputs);
 
-        $title = $_PUT["title"];
-        $content = $_PUT["content"];
+    if( isset( $inputs['title'] ) && isset( $inputs["content"] ) ){
 
         $note = new Note();
         $note->setId( $id );
-        $note->setTitle( $title );
-        $note->setContent( $content );
+        $note->setTitle( $inputs['title'] );
+        $note->setContent( $inputs['content'] );
+        $note->setPicture(null);
+        $note->setUserId($response['token']->data->userId);
 
         $rowCount = $repo->save( $note );
 
         if( $rowCount == 1 ){
-            $status["success"] = true;
+            echo json_encode([
+                'success'   =>  true,
+                'note'      =>  $note,
+            ]);
+            exit;
         }
-
     }
 
-    echo json_encode( $status );
+    echo json_encode( [
+        'success'   =>  false,
+        'error'     =>  'Tous les champs doivent être remplis.',
+    ] );
 
 });
 
@@ -360,7 +378,7 @@ Flight::route("POST /auth/inscription", function() {
 });
 
 Flight::route('/', function() {
-    echo md5('toto');
+    var_dump(date('Y-m-d H:i:s'));
 });
 
 /**
@@ -372,7 +390,11 @@ Flight::route('GET /users', function() {
 
     $offset = !is_null(Flight::request()->data->offset) ? Flight::request()->data->offset : 0;
     $users = $repo->getAll(10, $offset);
-    echo json_encode($users);
+    echo json_encode([
+        'success'   =>  true,
+        'users'     =>  $users,
+        'count'     =>  count($users)
+    ]);
 });
 
 /**
@@ -380,17 +402,30 @@ Flight::route('GET /users', function() {
  */
 Flight::route('GET /refresh', function() {
     $JWTAuth = Flight::get("JWTAuth");
-    $response = $JWTAuth->hasAccess(Flight::get('cfg')['key']);
-    if( !$response['success'] ) {
-        echo json_encode($response);
+
+    if( preg_match('/Bearer\s((.*)\.(.*)\.(.*))/', $JWTAuth->getHeaders(), $matches) ) {
+        $jwt = $matches[1];
+        if( $jwt ) {
+            $newToken = $JWTAuth->refresh($jwt, Flight::get('cfg')['key']);
+            echo json_encode([
+                'success'   =>  true,
+                'token'     =>  $newToken
+            ]);
+            exit;
+        }
+
+        echo json_encode([
+            'success'   =>  false,
+            'error'     =>  'Aucune session active dernièrement',
+        ]);
         exit;
     }
 
-    $newToken = $JWTAuth->refresh($response['token'], Flight::get('cfg')['key']);
     echo json_encode([
-        'success'   =>  true,
-        'token'     =>  $newToken
+        'success'   =>  false,
+        'error'     =>  'Token manquant',
     ]);
+    exit;
 });
 
 /**
@@ -403,17 +438,91 @@ Flight::route('GET /account', function() {
         echo json_encode($response);
         exit;
     }
+
+    $bddManager = Flight::get('BddManager');
+    $repo = $bddManager->getUserRepository();
+
+    $user = new User();
+    $user->setId($response['id']);
+    $user = $repo->getById($user);
+
+    if( $user ) {
+        echo json_encode([
+            'success'    =>  true,
+            'user'      =>  $user,
+        ]);
+        exit;
+    }
+
+    echo json_encode([
+        'success'   =>  false,
+        'error'     =>  'Une erreur est survenue durant la récupération de vos informations'
+    ]);
 });
 
-Flight::route('PUT /account/update', function() {
+/**
+ * On met à jour le compte utilisateur
+ */
+Flight::route('POST /account/update', function() {
     $JWTAuth = Flight::get("JWTAuth");
     $response = $JWTAuth->hasAccess(Flight::get("cfg")['key']);
     if( !$response['success'] ) {
         echo json_encode($response);
         exit;
     }
+
+    $userId = $response['id'];
+    $inputs = [
+        'email'         =>  Flight::request()->data->email,
+        'password'      =>  Flight::request()->data->password,
+        'lastname'      =>  Flight::request()->data->lastname,
+        'firstname'     =>  Flight::request()->data->firstname,
+    ];
+
+    $error = false;
+
+    foreach( $inputs as $key => $value ) {
+        if( !isset($inputs[$key]) || strlen($value) < 1 ) {
+            $error = true;
+        }
+    }
+
+    if( !$error ) {
+        $bddManager = Flight::get('BddManager');
+        $repo = $bddManager->getUserRepository();
+
+        $user = new User();
+        $user->setId($userId);
+        $user->setEmail($inputs['email']);
+        $user->setFirstName($inputs['firstname']);
+        $user->setLastName($inputs['lastname']);
+        $user->setPassword($inputs['password']);
+
+        if( $repo->save($user) > 0 ) {
+            echo json_encode([
+                'success'   =>  true,
+                'user'      =>  $user,
+                'token'     =>  $response['token'],
+            ]);
+            exit;
+        }
+
+        echo json_encode([
+            'succes'    =>  false,
+            'error'     =>  'Une erreur est survenue durant la mise à jour de vos informations.'
+        ]);
+        exit;
+    }
+
+    echo json_encode([
+        'success'   =>  false,
+        'error'     =>  'Tous les champs sont obligatoires'
+    ]);
 });
 
+/**
+ * On récupère les notes de l'utilisateur
+ */
 Flight::route('GET /account/notes', function() {
     $JWTAuth = Flight::get("JWTAuth");
 
@@ -422,6 +531,18 @@ Flight::route('GET /account/notes', function() {
         echo json_encode($response);
         exit;
     }
+
+    $bddManager = Flight::get('BddManager');
+    $repo = $bddManager->getNoteRepository();
+
+    $user = new User();
+    $user->setId($response['id']);
+
+    $notes = $repo->getByUserId($user);
+    echo json_encode([
+        'success'   =>  true,
+        'notes'     =>  $notes,
+    ]);
 });
 
 Flight::start();
